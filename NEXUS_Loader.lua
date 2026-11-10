@@ -1,24 +1,14 @@
---[[
-    Nexus Utility loader
-    Loads NEXUS_JOINER_LATEST.lua from your link. If the link is not set or is down,
-    it falls back to the last copy that worked, then to a file in your executor's workspace.
-]]
-
--- CONFIG
 local CONFIG = {
-    -- raw link to NEXUS_JOINER_LATEST.lua (GitHub "Raw" button). Leave the YOUR_ words to use the local file only.
-    Url = "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/NEXUS_JOINER_LATEST.lua",
+    Url = "https://raw.githubusercontent.com/adiii0-0/Nexus-Joiner/main/NEXUS_JOINER_LATEST.lua",
     Folder = "NEXUS",
-    CacheFile = "NEXUS/loader_cache.lua",       -- last copy downloaded successfully
-    LocalFile = "NEXUS/NEXUS_JOINER_LATEST.lua", -- put the script here (executor workspace) for offline use
-    MinSize = 2000,                              -- anything smaller is treated as a failed download
+    CacheFile = "NEXUS/loader_cache.lua",
+    LocalFile = "NEXUS/NEXUS_JOINER_LATEST.lua",
+    MinSize = 2000,
     Retries = 2,
 }
 
--- SERVICES
 local StarterGui = game:GetService("StarterGui")
 
--- UTILITIES
 local function Notify(Text)
     warn("[NEXUS LOADER] " .. Text)
     pcall(function()
@@ -32,10 +22,8 @@ end
 
 local function Fetch(Url)
     local Full = Url .. (string.find(Url, "?", 1, true) and "&t=" or "?t=") .. tostring(os.time())
-
     local Ok, Body = pcall(function() return game:HttpGet(Full, true) end)
     if Ok and type(Body) == "string" and #Body >= CONFIG.MinSize then return Body end
-
     local RF = RequestFunction()
     if RF then
         local ROk, R = pcall(RF, { Url = Full, Method = "GET" })
@@ -66,7 +54,6 @@ local function WriteCache(Body)
     end)
 end
 
--- LOGIC
 local Compile = loadstring or load
 if type(Compile) ~= "function" then
     Notify("This executor has no loadstring.")
@@ -95,14 +82,14 @@ end
 Sources[#Sources + 1] = { Name = "cached copy", Get = function() return ReadLocal(CONFIG.CacheFile) end }
 Sources[#Sources + 1] = { Name = "local file", Get = function() return ReadLocal(CONFIG.LocalFile) end }
 
-local Chunk, Used = nil, nil
+local Chunk, Used, Body = nil, nil, nil
 for _, Src in ipairs(Sources) do
-    local Body = Src.Get()
-    if Body then
-        local Fn, Err = Compile(Body, "=NexusJoiner")
+    local Fetched = Src.Get()
+    if Fetched then
+        local Fn, Err = Compile(Fetched, "=NexusJoiner")
         if type(Fn) == "function" then
-            Chunk, Used = Fn, Src.Name
-            if Src.Save then WriteCache(Body) end
+            Chunk, Used, Body = Fn, Src.Name, Fetched
+            if Src.Save then WriteCache(Fetched) end
             break
         end
         warn("[NEXUS LOADER] " .. Src.Name .. " did not compile: " .. tostring(Err))
@@ -114,7 +101,6 @@ if not Chunk then
     return
 end
 
--- INIT
 print("[NEXUS LOADER] loading from " .. Used)
-local Ok, RuntimeError = pcall(Chunk)
+local Ok, RuntimeError = pcall(Chunk, Body)
 if not Ok then Notify("Nexus Utility error: " .. tostring(RuntimeError)) end
